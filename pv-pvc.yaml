@@ -1,0 +1,77 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: local-pv
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data/pv-storage"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: local-pvc
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-exchange-pv
+  labels:
+    app: data-exchange-pv
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: data-exchange-pv
+  template:
+    metadata:
+      labels:
+        app: data-exchange-pv
+    spec:
+      volumes:
+      - name: pv-storage
+        persistentVolumeClaim:
+          claimName: local-pvc
+      containers:
+      - name: busybox
+        image: busybox:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          while true; do
+            echo "$(date): Сообщение от busybox (PV)" >> /shared/data.txt
+            sleep 5
+          done
+        volumeMounts:
+        - name: pv-storage
+          mountPath: /shared
+      - name: multitool
+        image: wbitt/network-multitool
+        command:
+        - /bin/sh
+        - -c
+        - |
+          tail -f /shared/data.txt
+        volumeMounts:
+        - name: pv-storage
+          mountPath: /shared
+        ports:
+        - containerPort: 8080
+        env:
+        - name: HTTP_PORT
+          value: "8080"
